@@ -29,16 +29,7 @@ If Chrome (or Edge) is set to “Ask where to save each file before downloading,
 
 One option is temporarily disable that setting: Chrome: Settings > Downloads > disable “Ask where to save each file before downloading”.
 
-### 2. Automatic zipping of all selected files
-
-“Just give me a single ZIP” feature is not feasible purely client‑side because:
-
-* Google export endpoints stream the file data; bundling them requires collecting all bytes locally, then constructing a ZIP blob (possible) BUT large classroom batches can exceed memory and still require each file to finish before delivering the ZIP—negating the incremental nature of the current approach.
-* Creating a seamless multi‑file -> single ZIP without saving intermediary files would still need to fetch every file via `fetch()` (CORS / auth restricted) or use the Drive REST API (needs OAuth consent) and then assemble a ZIP. This adds significant complexity (tokens, refresh handling, API quotas).
-
-If you know a solution, contributions are welcome, of course!
-
-### 3. (Optional hack) Auto‑press Enter to confirm each dialog
+#### (Optional hack) Auto‑press Enter to confirm each dialog
 
 If you cannot or do not wish to change the browser setting and are on a system where an automation script is acceptable, you can use a tiny Python utility to press Enter periodically (accepting each Save dialog). Stop it with Ctrl+C.
 
@@ -65,6 +56,19 @@ Steps:
     except KeyboardInterrupt:
         print("Stopped.")
     ```
+
+### 2. Automatic zipping of all selected files
+
+“Just give me a single ZIP” feature is not feasible purely client‑side because:
+
+* Google export endpoints stream the file data; bundling them requires collecting all bytes locally, then constructing a ZIP blob (possible) BUT large classroom batches can exceed memory and still require each file to finish before delivering the ZIP—negating the incremental nature of the current approach.
+* Creating a seamless multi‑file -> single ZIP without saving intermediary files would still need to fetch every file via `fetch()` (CORS / auth restricted) or use the Drive REST API (needs OAuth consent) and then assemble a ZIP. This adds significant complexity (tokens, refresh handling, API quotas).
+
+If you know a solution, contributions are welcome, of course!
+
+### 3. Only grabs links visible on the main course stream
+
+This extension does not open assignment detail pages or traverse folders: only file links already rendered in the scrolled stream are collected. Folder links are captured, not their contents. If you also need to download hidden filesm open the assignment or folder first so the links appear, then run Extract Links again.
 
 ---
 
