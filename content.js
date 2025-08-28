@@ -47,35 +47,36 @@ function buildList(response) {
             // Create a new list item for every document extracted from page
             var li = document.createElement("li");
             li.setAttribute("class", "titleItems");
+
             var checkBox = document.createElement("INPUT");
             checkBox.setAttribute("type", "checkbox");
             checkBox.setAttribute("value", i);
             checkBox.className = "check";
 
-            // Parse the extension name received and display the corresponding filetype icon
-            var fileName = response["titleList"][i];
-            var filePath = "";
-            if (fileName.includes(".xlsx") || fileName.includes(".xls")) {
-                filePath = "url('assets/excelFile.png')";
-            }
-            else if (fileName.includes(".docx") || fileName.includes(".doc")) {
-                filePath = "url('assets/wordFile.png')";
-            }
-            else if (fileName.includes(".pptx") || fileName.includes(".ppt")) {
-                filePath = "url('assets/powerpointFile.png')";
-            }
-            else if (fileName.includes(".pdf")) {
-                filePath = "url('assets/pdfFile.png')";
-            }
-            else {
-                filePath = "url('assets/file.png')";
-            }
-            // Put checkbox and truncated text inside the list item so long names stay on one line
+            // Determine / ensure extension based on link when missing so user gets proper file & icon
+            const originalLink = response.hrefList && response.hrefList[i];
+            const rawTitle = response["titleList"][i];
+            const inferredExt = determineExtensionFromLink(originalLink, rawTitle);
+            const displayTitle = appendMissingExtension(rawTitle, inferredExt);
+
+            const extLower = (displayTitle.split('.').pop() || '').toLowerCase();
+            let iconImg = 'assets/file.png';
+            if (['xlsx','xls'].includes(extLower)) iconImg = 'assets/excelFile.png';
+            else if (['docx','doc'].includes(extLower)) iconImg = 'assets/wordFile.png';
+            else if (['pptx','ppt'].includes(extLower)) iconImg = 'assets/powerpointFile.png';
+            else if (extLower === 'pdf') iconImg = 'assets/pdfFile.png';
+
+            // Explicit icon element (list-style-image fails with display:flex)
+            const iconSpan = document.createElement('span');
+            iconSpan.className = 'fileIcon';
+            iconSpan.style.backgroundImage = `url(${iconImg})`;
+            iconSpan.setAttribute('aria-hidden','true');
+
             var titleSpan = document.createElement('span');
             titleSpan.className = 'titleText';
-            titleSpan.textContent = response["titleList"][i];
-            li.style.listStyleImage = filePath;
-            // Append checkbox then title so checkbox stays aligned to the left
+            titleSpan.textContent = displayTitle;
+
+            li.appendChild(iconSpan);
             li.appendChild(checkBox);
             li.appendChild(titleSpan);
             ul.appendChild(li);
@@ -134,9 +135,11 @@ function buildList(response) {
                     const idx = parseInt(checkboxes[i].value);
                     const originalLink = response.hrefList[idx];
                     const title = response.titleList[idx];
-                    const exportLink = convertDriveLinkToDirect(originalLink, inferExtensionFromTitle(title));
+                    const extFromLink = determineExtensionFromLink(originalLink, title);
+                    const finalTitle = appendMissingExtension(title, extFromLink);
+                    const exportLink = convertDriveLinkToDirect(originalLink, extFromLink);
                     const fileId = extractDriveFileId(originalLink) || extractDriveFileId(exportLink) || String(idx);
-                    items.push({ originalLink, exportLink, filename: sanitizeFileName(title), fileId });
+                    items.push({ originalLink, exportLink, filename: sanitizeFileName(finalTitle, extFromLink), fileId });
                 }
             }
             if (!items.length) {
@@ -191,27 +194,41 @@ function buildList(response) {
 }
 
 // Utilities
-function sanitizeFileName(name) {
-    // Clean the name but preserve extension
+function sanitizeFileName(name, forcedExt) {
+    if (!name) name = 'file';
+    // Remove dangerous characters
     let clean = name.replace(/[/\\?%*:|"<>]/g, '_').trim();
-    
-    // If no extension, try to add one based on content
-    if (!/\.[a-zA-Z0-9]{1,6}$/.test(clean)) {
-        // Add common extension if missing
-        if (clean.toLowerCase().includes('document') || clean.toLowerCase().includes('doc')) {
-            clean += '.docx';
-        } else if (clean.toLowerCase().includes('spreadsheet') || clean.toLowerCase().includes('sheet')) {
-            clean += '.xlsx';
-        } else if (clean.toLowerCase().includes('presentation') || clean.toLowerCase().includes('slide')) {
-            clean += '.pptx';
-        } else if (clean.toLowerCase().includes('drawing')) {
-            clean += '.png';
-        } else if (clean.toLowerCase().includes('form')) {
-            clean += '.pdf';
-        }
+    // Ensure extension (prefer forcedExt)
+    const hasExt = /\.[a-z0-9]{1,6}$/i.test(clean);
+    if (!hasExt) {
+        if (forcedExt) clean += '.' + forcedExt.toLowerCase();
+    } else if (forcedExt) {
+        // If existing different extension but we know better (e.g. Google Doc labeled without ext), append correct one
+        // Only add if not already matching one of allowed list
+        const ext = clean.split('.').pop().toLowerCase();
+        if (ext !== forcedExt.toLowerCase()) clean += '.' + forcedExt.toLowerCase();
     }
-    
     return clean.substring(0, 180) || 'file';
+}
+
+// Determine canonical extension from Drive / Docs URL
+function determineExtensionFromLink(link, title) {
+    if (!link) return inferExtensionFromTitle(title) || null;
+    if (/docs\.google\.com\/document\//.test(link)) return 'docx';
+    if (/docs\.google\.com\/spreadsheets\//.test(link)) return 'xlsx';
+    if (/docs\.google\.com\/presentation\//.test(link)) return 'pptx';
+    if (/docs\.google\.com\/drawings\//.test(link)) return 'png';
+    if (/docs\.google\.com\/forms\//.test(link)) return 'pdf';
+    // For generic drive file we can't know; fallback to title
+    return inferExtensionFromTitle(title) || null;
+}
+
+// Append inferred extension if missing
+function appendMissingExtension(title, ext) {
+    if (!title) return ext ? 'file.' + ext : 'file';
+    if (!ext) return title; // nothing to add
+    if (/\.[a-z0-9]{1,6}$/i.test(title)) return title; // already has one
+    return title + '.' + ext;
 }
 
 function inferExtensionFromTitle(title) {

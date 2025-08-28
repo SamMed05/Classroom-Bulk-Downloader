@@ -115,14 +115,15 @@ li:hover {
 }
 li.titleItems {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 6px;
-    padding-right: 4px;
+    padding: 2px 4px 2px 4px;
     max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+li.titleItems .fileIcon { width:18px; height:18px; background-size:contain; background-repeat:no-repeat; flex:0 0 18px; filter: drop-shadow(0 0 2px rgba(0,0,0,.3)); }
 li.titleItems:hover {
     background: #eef6ff;
 }
@@ -139,7 +140,7 @@ li.titleItems:hover {
     max-width: calc(100% - 2.5em); /* leave space for checkbox */
     vertical-align: middle;
 }
-.titleItems .check { flex: 0 0 auto; margin-right: 8px; margin-left: 5px;}
+.titleItems .check { flex: 0 0 auto; margin-right: 8px; }
 #SAText {
     display: none;
     margin-left: 42%;
