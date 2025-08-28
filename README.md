@@ -1,4 +1,4 @@
-# Classroom Bulk Downloader <img src="assets/icon48.png" alt="Extension icon" width="130" align="right" />
+# Classroom Bulk Downloader <img src="assets/icon128.png" alt="Extension icon" width="130" align="right" />
 
 ![Forks badge](https://img.shields.io/github/forks/SamMed05/Classroom-Bulk-Downloader?color=green&style=for-the-badge)
 ![Stars badge](https://img.shields.io/github/stars/SamMed05/Classroom-Bulk-Downloader?color=blueviolet&style=for-the-badge)
