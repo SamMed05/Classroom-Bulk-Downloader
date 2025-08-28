@@ -1,5 +1,14 @@
 // Waits for receiving the list of extracted links from background.js
 chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
+    if (response && response.type === 'HARVEST_COMPLETE') {
+        buildList(response);
+    } else if (response && response.titleList) {
+        // Backward compatibility
+        buildList(response);
+    }
+});
+
+function buildList(response) {
     // Toggling visibility state of various HTML elements ONLY when they are loaded
 
     var loadingAnimation = document.querySelector(".loadingAni");
@@ -15,7 +24,7 @@ chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
 
     var downloadButton = document.querySelector("#dwnbtn");
     if (downloadButton) {
-        document.querySelector("#dwnbtn").style.display = "block";
+        document.querySelector("#dwnbtn").classList.add('visible');
     }
 
     var titlebox = document.querySelector(".titleBox");
@@ -23,15 +32,13 @@ chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
         document.querySelector(".titleBox").style.display = "block";
     }
 
+    // Remove/Hide old cancel area (not useful once Stop exists)
     var cancelbox = document.querySelector(".cancelBox");
     if (cancelbox) {
-        document.querySelector(".cancelBox").style.backgroundColor = "#ffffff";
+        cancelbox.style.display = 'none';
     }
 
-    var sh = document.querySelector("#subheading");
-    if (sh) {
-        document.querySelector("#subheading").style.fontSize = "2rem";
-    }
+    // Keep subheading styling purely in CSS for consistent alignment in both views.
 
     var ul = document.getElementById("titleList");
     if (response["titleList"]) {
@@ -63,18 +70,24 @@ chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
             else {
                 filePath = "url('assets/file.png')";
             }
-            // Appends newly made list item of file names into the unordered list
-            li.appendChild(document.createTextNode(response["titleList"][i]));
+            // Put checkbox and truncated text inside the list item so long names stay on one line
+            var titleSpan = document.createElement('span');
+            titleSpan.className = 'titleText';
+            titleSpan.textContent = response["titleList"][i];
             li.style.listStyleImage = filePath;
+            // Append checkbox then title so checkbox stays aligned to the left
+            li.appendChild(checkBox);
+            li.appendChild(titleSpan);
             ul.appendChild(li);
-            ul.appendChild(checkBox);
-            document.querySelector("h2").innerHTML = (i + 1) + " files found!"
+            document.querySelector("h2").innerHTML = (i + 1) + " files found!";
         }
-        document.querySelector("#dwnbtn").style.display = "block";
+    document.querySelector("#dwnbtn").classList.add('visible');
         document.querySelector("#selAllCheck").style.display = "block";
         document.querySelector("#SAText").style.display = "block";
 
         document.getElementById("selAllCheck").addEventListener("click", selectAllFunc);
+
+    bindStopButton();
 
 
         // Function to select all/deselect all checkboxes 
@@ -114,35 +127,54 @@ chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
 
         // Function triggered when "Download Files" button is clicked
         document.getElementById("dwnbtn").addEventListener("click", function () {
-            var checkboxes = document.getElementsByClassName("check");
-            var selectedFiles = [];
-            var selectedLinks = [];
-            for (var i = 0; i < checkboxes.length; i++) {
+            const checkboxes = document.getElementsByClassName("check");
+            const items = [];
+            for (let i = 0; i < checkboxes.length; i++) {
                 if (checkboxes[i].checked) {
-                    selectedFiles.push(parseInt(checkboxes[i].value));
+                    const idx = parseInt(checkboxes[i].value);
+                    const originalLink = response.hrefList[idx];
+                    const title = response.titleList[idx];
+                    const exportLink = convertDriveLinkToDirect(originalLink, inferExtensionFromTitle(title));
+                    const fileId = extractDriveFileId(originalLink) || extractDriveFileId(exportLink) || String(idx);
+                    items.push({ originalLink, exportLink, filename: sanitizeFileName(title), fileId });
                 }
-
             }
-            for (j = 0; j < selectedFiles.length; j++) {
-                var selectedValue = selectedFiles[j];
-                selectedLinks.push(response["hrefList"][selectedValue]);
+            if (!items.length) {
+                alert('Select at least one file.');
+                return;
             }
-
-            // Manipulation of drive links to make it downloadable document
-            var downloadWindows = [];
-            for (var k = 0; k < selectedFiles.length; k++) {
-                var str = selectedLinks[k];
-                var downloadableLink = str.replace("open", "uc");
-                downloadableLink = downloadableLink + "&export=download";
-                var downloadWindow = window.open(downloadableLink, "_blank", "fullscreen=yes");
-                downloadWindows.push(downloadWindow);
-
-            }
-            setTimeout(function () {
-                for (var l = 0; l < downloadWindows.length; l++) {
-                    downloadWindows[l].close();
+                document.getElementById("selectedCount").innerHTML = "0 / " + response["titleList"].length + " selected";
+        
+            document.querySelector("h2").innerHTML = `Queued ${items.length} downloads…`;
+            const stopBtn = document.getElementById('stopDownloads');
+            if (stopBtn) stopBtn.style.display = 'flex';
+            const cancelbox2 = document.querySelector('.cancelBox'); if (cancelbox2) cancelbox2.style.display = 'none';
+            chrome.runtime.sendMessage({ type: 'DOWNLOAD_BATCH', items }, (res) => {
+                if (!res || !res.ok) {
+                    document.querySelector("h2").innerHTML = 'Failed to queue downloads.';
+                } else {
+                    // Periodically poll status while popup open
+                    let poll = 0;
+                    const poller = setInterval(() => {
+                        chrome.runtime.sendMessage({ type: 'DOWNLOAD_STATUS' }, (stat) => {
+                            if (!stat) return;
+                            if (stat.stopped) {
+                                document.querySelector("h2").innerHTML = `Stopped at ${stat.completed}/${stat.total}`;
+                                clearInterval(poller);
+                                if (stopBtn) stopBtn.style.display = 'none';
+                            } else {
+                                document.querySelector("h2").innerHTML = `Downloading ${stat.completed}/${stat.total}`;
+                                if (stat.total && stat.completed >= stat.total) {
+                                    document.querySelector("h2").innerHTML = 'All downloads started.';
+                                    clearInterval(poller);
+                                    if (stopBtn) stopBtn.style.display = 'none';
+                                }
+                            }
+                        });
+                        if (++poll > 120) clearInterval(poller); // stop after ~2 min
+                    }, 1000);
                 }
-            }, 20000);
+            });
         });
 
         // Function to scrollIntoView the document name that is clicked
@@ -150,33 +182,270 @@ chrome.runtime.onMessage.addListener(function (response, sender, sendResponse) {
             document.querySelectorAll(".titleItems")[j].addEventListener("click", sendFileName);
         }
         function sendFileName() {
-            var fileClicked = this.innerHTML;
+            var fileClicked = this.querySelector('.titleText') ? this.querySelector('.titleText').textContent : this.innerHTML;
             chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
                 chrome.tabs.sendMessage(tabs[0].id, fileClicked)
             });
         }
     }
+}
+
+// Utilities
+function sanitizeFileName(name) {
+    // Clean the name but preserve extension
+    let clean = name.replace(/[/\\?%*:|"<>]/g, '_').trim();
+    
+    // If no extension, try to add one based on content
+    if (!/\.[a-zA-Z0-9]{1,6}$/.test(clean)) {
+        // Add common extension if missing
+        if (clean.toLowerCase().includes('document') || clean.toLowerCase().includes('doc')) {
+            clean += '.docx';
+        } else if (clean.toLowerCase().includes('spreadsheet') || clean.toLowerCase().includes('sheet')) {
+            clean += '.xlsx';
+        } else if (clean.toLowerCase().includes('presentation') || clean.toLowerCase().includes('slide')) {
+            clean += '.pptx';
+        } else if (clean.toLowerCase().includes('drawing')) {
+            clean += '.png';
+        } else if (clean.toLowerCase().includes('form')) {
+            clean += '.pdf';
+        }
+    }
+    
+    return clean.substring(0, 180) || 'file';
+}
+
+function inferExtensionFromTitle(title) {
+    const m = /\.([a-zA-Z0-9]{1,6})(?:$|\s)/.exec(title || '');
+    return m ? m[1].toLowerCase() : null;
+}
+
+function extractDriveFileId(link) {
+    // Handle various Google Drive URL formats
+    let m = link.match(/\/file\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/[?&]id=([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/document\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/presentation\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/drawings\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    m = link.match(/forms\/d\/([a-zA-Z0-9_-]+)/); if (m) return m[1];
+    return null;
+}
+
+function convertDriveLinkToDirect(link, extGuess) {
+    const id = extractDriveFileId(link);
+    if (!id) return link;
+    // extract authuser if present so we keep same account
+    const mAuth = link.match(/[?&]authuser=(\d+)/);
+    const authuser = mAuth ? mAuth[1] : null;
+    const authParam = authuser ? `&authuser=${authuser}` : '';
+
+    // If link already points to drive.usercontent (direct download), return it unchanged
+    if (/drive\.usercontent\.google\.com/.test(link)) return link;
+
+    // Handle different Google file types with proper export formats
+    if (/docs\.google\.com\/document\//.test(link)) {
+        return `https://docs.google.com/document/d/${id}/export?format=docx${authParam}`;
+    }
+    if (/docs\.google\.com\/spreadsheets\//.test(link)) {
+        return `https://docs.google.com/spreadsheets/d/${id}/export?format=xlsx${authParam}`;
+    }
+    if (/docs\.google\.com\/presentation\//.test(link)) {
+        return `https://docs.google.com/presentation/d/${id}/export?format=pptx${authParam}`;
+    }
+    if (/docs\.google\.com\/drawings\//.test(link)) {
+        return `https://docs.google.com/drawings/d/${id}/export?format=png${authParam}`;
+    }
+    if (/docs\.google\.com\/forms\//.test(link)) {
+        return `https://docs.google.com/forms/d/${id}/export?format=pdf${authParam}`;
+    }
+
+    // For generic Drive files, use the proper download endpoint and preserve authuser
+    return `https://drive.google.com/uc?export=download&id=${id}&confirm=t${authParam}`;
+}
+
+// Old cancel button logic removed (superseded by Stop Downloads)
+
+document.addEventListener("DOMContentLoaded", () => { 
+    const runBtn = document.getElementById("runScript");
+    if (runBtn) runBtn.addEventListener("click", getLinks);
+    // Always try to bind Stop button (idempotente)
+    bindStopButton();
+    // If background queue already running, reflect its status so user can stop.
+    try {
+        chrome.runtime.sendMessage({ type: 'DOWNLOAD_STATUS' }, (stat) => {
+            if (!stat) return;
+            if (stat.total > 0) {
+                const h2 = document.querySelector('h2');
+                const stopBtn = document.getElementById('stopDownloads');
+                if (stat.stopped) {
+                    if (h2) h2.innerHTML = `Stopped at ${stat.completed}/${stat.total}`;
+                } else if (stat.completed >= stat.total) {
+                    if (h2) h2.innerHTML = 'All downloads started.';
+                } else {
+                    if (h2) h2.innerHTML = `Downloading ${stat.completed}/${stat.total}`;
+                }
+                if (stopBtn && !stat.stopped && stat.completed < stat.total) stopBtn.style.display = 'flex';
+                // Poll only if still in progress
+                if (!stat.stopped && stat.completed < stat.total) {
+                    let poll = 0;
+                    const poller = setInterval(() => {
+                        chrome.runtime.sendMessage({ type: 'DOWNLOAD_STATUS' }, (s2) => {
+                            if (!s2) return;
+                            if (s2.stopped) {
+                                if (h2) h2.innerHTML = `Stopped at ${s2.completed}/${s2.total}`;
+                                if (stopBtn) stopBtn.style.display = 'none';
+                                clearInterval(poller);
+                            } else if (s2.completed >= s2.total) {
+                                if (h2) h2.innerHTML = 'All downloads started.';
+                                if (stopBtn) stopBtn.style.display = 'none';
+                                clearInterval(poller);
+                            } else {
+                                if (h2) h2.innerHTML = `Downloading ${s2.completed}/${s2.total}`;
+                            }
+                        });
+                        if (++poll > 120) clearInterval(poller);
+                    }, 1000);
+                }
+            }
+        });
+    } catch (e) { /* ignore */ }
+    // Reveal UI after initial status fetch attempt to reduce flicker
+    requestAnimationFrame(()=>{ document.body.style.opacity = '1'; });
 });
 
-// Reload the extension HTML page when cancel button is clicked
-var cancelElement = document.getElementById("cancel");
-if (cancelElement) {
-    document.getElementById("cancel").addEventListener("click", function () {
-        chrome.tabs.executeScript({ code: `location.reload();` });
-        location.reload();
+// Idempotent binding of Stop Downloads button (works even if popup reopened mid-download)
+function bindStopButton() {
+    const stopBtn = document.getElementById('stopDownloads');
+    if (!stopBtn) return;
+    if (stopBtn.dataset.bound === '1') return; // already bound
+    stopBtn.dataset.bound = '1';
+    stopBtn.addEventListener('click', () => {
+        chrome.runtime.sendMessage({ type: 'STOP_DOWNLOADS' }, () => {
+            const h2 = document.querySelector('h2');
+            if (h2) h2.innerHTML = 'Downloads stopped.';
+            stopBtn.style.display = 'none';
+        });
     });
 }
 
-document.addEventListener("DOMContentLoaded", () => { document.getElementById("runScript").addEventListener("click", getLinks) });
-
 // Function executed to run background scripts
 function getLinks() {
-    chrome.tabs.executeScript({ file: "background.js" });
+    // Guard against system pages
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        const tab = tabs[0];
+        if (!tab) return;
+        if (tab.url && tab.url.startsWith('chrome://')) {
+            document.querySelector("h2").innerHTML = "This extension can't run on internal browser pages.";
+            return;
+        }
+        chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["background.js"] });
+    });
+    chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
+        // already handled above
+    });
     document.querySelector("h2").innerHTML = "Please wait while we scroll through the page and extract links!";
     document.getElementById("runScript").style.display = "none";
     document.querySelector(".loadingAni").style.display = "block";
-    document.querySelector(".cancelBox").style.display = "block";
+    // Keep cancel hidden with new Stop button approach
+    const cancelbox3 = document.querySelector('.cancelBox'); if (cancelbox3) cancelbox3.style.display = 'none';
+}
 
+// Open a background tab, inject a script that runs in page context to trigger download, then close
+function openTabAndTriggerDownload(originalLink, exportLink, filename) {
+    chrome.tabs.create({ url: originalLink, active: false }, function (tab) {
+        if (!tab || !tab.id) { console.error('Failed to create tab for', originalLink); return; }
+        const tabId = tab.id;
+        let downloadStarted = false;
+
+        const closeTab = () => { try { chrome.tabs.remove(tabId); } catch (e) { } };
+
+        const onCreated = (downloadItem) => {
+            if (downloadItem && downloadItem.finalUrl) {
+                downloadStarted = true;
+                try { chrome.downloads.onCreated.removeListener(onCreated); } catch (e) { }
+                setTimeout(closeTab, 1200);
+            }
+        };
+        chrome.downloads.onCreated.addListener(onCreated);
+
+        // Wait for tab to finish loading before attempting DOM extraction / clicks
+        const onUpdated = function (updatedTabId, changeInfo, t) {
+            if (updatedTabId !== tabId) return;
+            if (changeInfo.status === 'complete' || (t && t.status === 'complete')) {
+                chrome.tabs.onUpdated.removeListener(onUpdated);
+
+                // after load, run extraction & click sequence
+                (async () => {
+                    try {
+                        // attempt to find a direct link in page
+                        const directHref = await (async () => {
+                            const fn = (exportUrl) => {
+                                try {
+                                    const selectors = ['a[aria-label*="Download"]','a[data-tooltip*="Download"]','a[href*="drive.google.com/uc"]','a[href*="drive.google.com/file/d/"]','a[download]'];
+                                    for (const sel of selectors) { const el = document.querySelector(sel); if (el && el.href) return el.href; }
+                                    const link = document.querySelector('link[rel="canonical"]'); if (link && link.href) return link.href;
+                                    return exportUrl || null;
+                                } catch (e) { return null; }
+                            };
+                            try {
+                                const res = await new Promise(r => chrome.scripting.executeScript({ target: { tabId }, func: fn, args: [exportLink] }, r));
+                                return res && res[0] && res[0].result ? res[0].result : null;
+                            } catch (e) { return null; }
+                        })();
+
+                        if (directHref) {
+                            // navigate the tab to directHref so download happens in page context
+                            try {
+                                chrome.tabs.update(tabId, { url: directHref }, function () { /* navigation started */ });
+                                // wait up to 6s for download to start
+                                const s = Date.now();
+                                while (!downloadStarted && Date.now() - s < 6000) await new Promise(r => setTimeout(r, 300));
+                                if (downloadStarted) return closeTab();
+                            } catch (e) { /* continue */ }
+                        }
+
+                        // try clicking download button
+                        const clicked = await new Promise((resolve) => {
+                            const fnClick = () => {
+                                try {
+                                    const btn = document.querySelector('[aria-label*="Download"]') || document.querySelector('[data-tooltip*="Download"]') || document.querySelector('button[aria-label="Download"]');
+                                    if (btn) { btn.click(); return true; }
+                                    const a = document.querySelector('a[download]'); if (a) { a.click(); return true; }
+                                    return false;
+                                } catch (e) { return false; }
+                            };
+                            chrome.scripting.executeScript({ target: { tabId }, func: fnClick }, (res) => { resolve(res && res[0] && res[0].result); });
+                        });
+                        if (clicked) {
+                            const s2 = Date.now();
+                            while (!downloadStarted && Date.now() - s2 < 8000) await new Promise(r => setTimeout(r, 300));
+                            if (downloadStarted) return closeTab();
+                        }
+
+                        // fallback: navigate to exportLink
+                        if (exportLink) {
+                            chrome.tabs.update(tabId, { url: exportLink }, function () { });
+                            const s3 = Date.now();
+                            while (!downloadStarted && Date.now() - s3 < 8000) await new Promise(r => setTimeout(r, 300));
+                            if (downloadStarted) return closeTab();
+                        }
+
+                        // final: make active to prompt any UI and try click again
+                        try {
+                            chrome.tabs.update(tabId, { active: true }, function () {
+                                const fnFinal = () => { try { const b = document.querySelector('[aria-label*="Download"]'); if (b) { b.click(); return true; } return false; } catch (e) { return false; } };
+                                chrome.scripting.executeScript({ target: { tabId }, func: fnFinal }, () => setTimeout(() => closeTab(), 5000));
+                            });
+                        } catch (e) { closeTab(); }
+                    } catch (e) { console.error('openTab error', e); closeTab(); }
+                    try { chrome.downloads.onCreated.removeListener(onCreated); } catch (e) { }
+                })();
+            }
+        };
+        chrome.tabs.onUpdated.addListener(onUpdated);
+        // also set a safety timeout
+        setTimeout(() => { try { chrome.tabs.onUpdated.removeListener(onUpdated); } catch (e) { } }, 30000);
+    });
 }
 
 

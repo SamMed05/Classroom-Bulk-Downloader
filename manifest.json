@@ -1,41 +1,31 @@
 {
-    "manifest_version": 2,
-    "name": "StudEaz for Google Classroom",
-    "version": "1.3",
-    "description": "Get rid of all the hassle of manually downloading materials from Google Classroom. Download multiple documents in a few clicks.",
-    
-    "permissions": 
-    [
-        "activeTab"
+    "manifest_version": 3,
+    "name": "Classroom Bulk Downloader",
+    "version": "1.5.0",
+    "description": "Download multiple documents from Google Classroom in a few clicks.",
+    "permissions": [
+        "activeTab",
+        "scripting",
+        "tabs",
+        "downloads"
     ],
-
-    "content_scripts": 
-    [
-        {
-            "matches": 
-            [
-                "https://classroom.google.com/*",
-                "http://classroom.google.com/*"
-            ],
-            
-            "js": 
-            [
-                "content.js"
-            ]
-        }
+    "host_permissions": [
+        "https://classroom.google.com/*",
+        "http://classroom.google.com/*",
+        "https://drive.google.com/*",
+        "https://docs.google.com/*"
     ],
-
-    "icons": 
-    {
+    "icons": {
         "16": "assets/icon16.png",
         "48": "assets/icon48.png",
         "128": "assets/icon128.png"
     },
-    
-    "browser_action": 
-    {
+    "action": {
         "default_icon": "assets/icon16.png",
         "default_popup": "pop.html",
-        "default_title": "StudEaz for Google Classroom"
+        "default_title": "Classroom Bulk Downloader"
+    },
+    "background": {
+        "service_worker": "worker.js"
     }
 }

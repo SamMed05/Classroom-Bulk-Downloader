@@ -28,12 +28,12 @@ body {
 }
 h1 {
     font-family: "Orbitron", sans-serif;
-    width: 191px;
-    height: 50px;
-    margin: 60px 80px 40px 80px;
+    margin: 32px 20px 10px 20px;
     font-weight: 900;
-    font-size: 40px;
-    line-height: 50px;
+    font-size: 26px;
+    line-height: 1.2;
+    text-align: center;
+    word-break: break-word;
 }
 #titleEaz {
     font-family: "Orbitron", sans-serif;
@@ -59,14 +59,12 @@ h1 {
 }
 h2 {
     text-align: center;
-    width: 350px;
-    height: 50px;
-    margin: auto;
-    padding-top: 35px;
-    margin-left: -2px;
-    font-size: 1rem;
-    padding-left: 3px;
-    padding-right: 14px;
+    width: 100%;
+    margin: 0 auto 8px auto;
+    padding: 4px 12px;
+    font-size: 0.95rem;
+    line-height: 1.3;
+    word-break: break-word;
 }
 #runScript {
     -webkit-border-radius: 10px;
@@ -105,17 +103,43 @@ li:hover {
 }
 .check {
     display: inline-block;
-    transform: translate(280px, -23px);
+    margin-left: auto;
+    transform: none;
 }
 #titleList {
-    line-height: 1.4rem;
-    font-size: 1rem;
-    margin-bottom: 0;
+    line-height: 1.3rem;
+    font-size: 0.9rem;
+    margin: 0;
+    padding: 8px 12px 16px 12px;
+    list-style-position: inside;
+}
+li.titleItems {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    padding-right: 4px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+li.titleItems:hover {
+    background: #eef6ff;
 }
 #selectedCount {
     text-align: center;
     font-size: 1.2rem;
 }
+/* Ensure the checkbox and title sit on the same line; title truncates with ellipsis */
+.titleItems .titleText {
+    display: inline-block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: calc(100% - 2.5em); /* leave space for checkbox */
+    vertical-align: middle;
+}
+.titleItems .check { flex: 0 0 auto; margin-right: 8px; margin-left: 5px;}
 #SAText {
     display: none;
     margin-left: 42%;
@@ -131,21 +155,22 @@ li:hover {
     -webkit-border-radius: 6px;
     -moz-border-radius: 6px;
     border-radius: 6px;
-    height: 50px;
-    line-height: 1rem;
+    min-height: 44px;
+    line-height: 1.2;
     color: #fff;
     font-family: "Poppins", sans-serif;
-    width: 195px;
-    font-size: 16px;
+    width: 80%;
+    font-size: 15px;
     font-weight: 600;
     background-color: #2ccc33;
     border: solid #2ccc33 1px;
     text-decoration: none;
     cursor: pointer;
     text-align: center;
-    padding-bottom: 40px;
-    margin: 40px 50px 5px 85px;
+    padding: 6px 12px;
+    margin: 24px 10% 5px 10%;
 }
+#dwnbtn.visible { display: flex; align-items: center; justify-content: center; }
 #dwnbtn:hover {
     background: #23ae28;
     border: solid #23ae28 1px;
@@ -156,15 +181,17 @@ li:hover {
 }
 #downloadImg {
     background-color: transparent;
-    transform: translate(-2px, 7px);
+    /* transform: translate(-2px, 7px); */
     margin-top: 5px;
 }
 .titleBox {
     display: none;
     background-color: #fff;
     color: #000;
-    padding-top: 20px;
+    padding-top: 6px;
     margin-bottom: 0;
+    max-height: 200px;
+    overflow-y: auto;
 }
 .cancelBox {
     display: none;
@@ -200,6 +227,28 @@ li:hover {
     border-radius: 6px;
     text-decoration: none;
 }
+#stopDownloads {
+    display: none; /* shown dynamically */
+    margin: 16px auto 8px auto;
+    padding: 8px 18px;
+    background: #b80000;
+    border: none;
+    -webkit-border-radius: 6px;
+    -moz-border-radius: 6px;
+    border-radius: 6px;
+    line-height: 1.2;
+    color: #fff;
+    font-family: "Poppins", sans-serif;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,.25);
+    justify-content: center;
+    align-items: center;
+    min-width: 160px;
+}
+#stopDownloads:hover { background:#910000; }
 .loadingAni {
     margin-top: 9.5rem;
     display: none;
